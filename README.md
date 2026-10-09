@@ -1,4 +1,4 @@
-# Prozi | Prosthetic Sizing Tool
+# Prozi (Prosthetic Sizing Tool)
 
 **A computer vision-based tool for analyzing residual limb measurements and comparing 3D-printed prosthetic designs.**
 
