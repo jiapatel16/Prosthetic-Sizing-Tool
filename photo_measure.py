@@ -1,0 +1,325 @@
+from pathlib import Path
+from tkinter import Tk, filedialog, simpledialog
+
+import cv2
+import numpy as np
+
+
+REPORTS_FOLDER = Path("reports")
+REPORT_PATH = REPORTS_FOLDER / "photo_measurement_report.txt"
+
+WINDOW_NAME = "Prozi Photo Measurement"
+
+
+def choose_photo() -> Path | None:
+    root = Tk()
+    root.withdraw()
+
+    selected_file = filedialog.askopenfilename(
+        title="Choose a residual-limb photo",
+        initialdir="photos",
+        filetypes=[
+            ("Image files", "*.jpg *.jpeg *.png"),
+            ("JPEG files", "*.jpg *.jpeg"),
+            ("PNG files", "*.png"),
+            ("All files", "*.*"),
+        ],
+    )
+
+    root.destroy()
+
+    if not selected_file:
+        return None
+
+    return Path(selected_file)
+
+
+def ask_known_distance() -> float | None:
+    root = Tk()
+    root.withdraw()
+
+    distance = simpledialog.askfloat(
+        title="Ruler Calibration",
+        prompt=(
+            "Enter the real distance between the two ruler marks "
+            "you selected, in millimeters.\n\n"
+            "Example: 100 for 10 centimeters."
+        ),
+        minvalue=1.0,
+    )
+
+    root.destroy()
+    return distance
+
+
+def calculate_pixel_distance(
+    point_one: tuple[int, int],
+    point_two: tuple[int, int],
+) -> float:
+    difference_x = point_two[0] - point_one[0]
+    difference_y = point_two[1] - point_one[1]
+
+    return float(
+        np.sqrt(
+            difference_x**2
+            + difference_y**2
+        )
+    )
+
+
+def select_points(
+    image: np.ndarray,
+    instructions: str,
+    number_of_points: int = 2,
+) -> list[tuple[int, int]]:
+    selected_points: list[tuple[int, int]] = []
+    display_image = image.copy()
+
+    def mouse_callback(
+        event: int,
+        x: int,
+        y: int,
+        flags: int,
+        parameter: object,
+    ) -> None:
+        del flags
+        del parameter
+
+        if (
+            event == cv2.EVENT_LBUTTONDOWN
+            and len(selected_points) < number_of_points
+        ):
+            selected_points.append((x, y))
+
+            cv2.circle(
+                display_image,
+                (x, y),
+                7,
+                (0, 0, 255),
+                -1,
+            )
+
+            cv2.putText(
+                display_image,
+                str(len(selected_points)),
+                (x + 10, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 0, 255),
+                2,
+            )
+
+            cv2.imshow(
+                WINDOW_NAME,
+                display_image,
+            )
+
+    cv2.namedWindow(
+        WINDOW_NAME,
+        cv2.WINDOW_NORMAL,
+    )
+
+    cv2.resizeWindow(
+        WINDOW_NAME,
+        1100,
+        800,
+    )
+
+    cv2.setMouseCallback(
+        WINDOW_NAME,
+        mouse_callback,
+    )
+
+    print()
+    print(instructions)
+    print("Click the requested two points.")
+    print("Press R to restart the selection.")
+    print("Press Enter after selecting both points.")
+    print("Press Escape to cancel.")
+
+    while True:
+        image_with_instructions = display_image.copy()
+
+        cv2.putText(
+            image_with_instructions,
+            instructions,
+            (25, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+
+        cv2.imshow(
+            WINDOW_NAME,
+            image_with_instructions,
+        )
+
+        key = cv2.waitKey(20) & 0xFF
+
+        if key == 27:
+            selected_points = []
+            break
+
+        if key in (ord("r"), ord("R")):
+            selected_points.clear()
+            display_image = image.copy()
+
+        if key in (10, 13) and len(selected_points) == number_of_points:
+            break
+
+    cv2.destroyAllWindows()
+
+    return selected_points
+
+
+def create_report(
+    photo_path: Path,
+    millimeters_per_pixel: float,
+    length_mm: float,
+    width_mm: float,
+) -> str:
+    lines = [
+        "======================================",
+        "     Prozi Photo Measurement Report",
+        "======================================",
+        "",
+        "Photo",
+        "-----",
+        f"Source file: {photo_path.name}",
+        "",
+        "Calibration",
+        "-----------",
+        f"Scale: {millimeters_per_pixel:.6f} mm per pixel",
+        "",
+        "Estimated Measurements",
+        "----------------------",
+        f"Residual-limb length: {length_mm:.2f} mm",
+        f"Measured width: {width_mm:.2f} mm",
+        "",
+        "Important Limitations",
+        "---------------------",
+        "Measurements are estimated from one two-dimensional photo.",
+        "The ruler and limb should be in approximately the same plane.",
+        "Camera angle and perspective may affect accuracy.",
+        "Circumference cannot be measured reliably from one image.",
+        "These measurements require manual verification.",
+        "This tool does not provide medical advice.",
+        "",
+        "Generated by Prozi Photo Measurement v0.1",
+    ]
+
+    return "\n".join(lines)
+
+
+def save_report(report: str) -> None:
+    REPORTS_FOLDER.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    REPORT_PATH.write_text(
+        report,
+        encoding="utf-8",
+    )
+
+
+def main() -> None:
+    print("Starting Prozi Photo Measurement...")
+
+    photo_path = choose_photo()
+
+    if photo_path is None:
+        print("No photo was selected.")
+        return
+
+    image = cv2.imread(str(photo_path))
+
+    if image is None:
+        print("The selected photo could not be opened.")
+        return
+
+    ruler_points = select_points(
+        image,
+        "Select two ruler marks",
+    )
+
+    if len(ruler_points) != 2:
+        print("Ruler calibration was canceled.")
+        return
+
+    known_distance_mm = ask_known_distance()
+
+    if known_distance_mm is None:
+        print("No ruler distance was entered.")
+        return
+
+    ruler_pixel_distance = calculate_pixel_distance(
+        ruler_points[0],
+        ruler_points[1],
+    )
+
+    if ruler_pixel_distance <= 0:
+        print("The ruler points produced an invalid distance.")
+        return
+
+    millimeters_per_pixel = (
+        known_distance_mm
+        / ruler_pixel_distance
+    )
+
+    length_points = select_points(
+        image,
+        "Select the two endpoints of the residual-limb length",
+    )
+
+    if len(length_points) != 2:
+        print("Length measurement was canceled.")
+        return
+
+    width_points = select_points(
+        image,
+        "Select two opposite edges for the limb width",
+    )
+
+    if len(width_points) != 2:
+        print("Width measurement was canceled.")
+        return
+
+    length_pixels = calculate_pixel_distance(
+        length_points[0],
+        length_points[1],
+    )
+
+    width_pixels = calculate_pixel_distance(
+        width_points[0],
+        width_points[1],
+    )
+
+    length_mm = (
+        length_pixels
+        * millimeters_per_pixel
+    )
+
+    width_mm = (
+        width_pixels
+        * millimeters_per_pixel
+    )
+
+    report = create_report(
+        photo_path,
+        millimeters_per_pixel,
+        length_mm,
+        width_mm,
+    )
+
+    save_report(report)
+
+    print()
+    print(report)
+    print()
+    print(f"Report saved to: {REPORT_PATH}")
+
+
+if __name__ == "__main__":
+    main()
