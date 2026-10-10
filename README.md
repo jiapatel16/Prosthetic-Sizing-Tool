@@ -8,6 +8,11 @@ Prozi is an independently developed Python application that explores how compute
 
 The project began after I built and assembled an e-NABLE Raptor Reloaded prosthetic hand. Through that experience, I became interested in the challenges of determining the correct size for an individual recipient. I wanted to explore whether image processing could make parts of this process more accessible and efficient while still allowing experienced makers to review the results.
 
+Watch a demonstration of Prozi's image-processing, measurement, and 3D model comparison workflow:
+- https://youtu.be/bcev-vbtrv0
+
+The demonstration uses AI-generated synthetic images. Prozi is an experimental prototype, and its sizing estimates have not been clinically validated.
+
 How It Works: Prozi combines several stages of image processing and geometric analysis into one workflow.
 
 1. Image Segmentation: Identifies the residual limb in side and top-view photographs, with the option to manually correct the selected area.
